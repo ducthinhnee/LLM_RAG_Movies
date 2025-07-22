@@ -7,16 +7,20 @@ from app.utils.vector_store import VectorStore
 class KnowledgeBaseService:
     @classmethod
     async def add_collection(cls, api_key: str, collection_name: str, documents: [Document]):
-        store = VectorStore.get_vector_store(
-            api_key=api_key,
-            collection_name=collection_name)
+        try:
+            store = VectorStore.get_vector_store(
+                api_key=api_key,
+                collection_name=collection_name)
 
-        # Safely extract '_id' or generate fallback IDs
-        ids = [
-            doc.metadata["_id"] if "_id" in doc.metadata else str(uuid.uuid4())
-            for doc in documents
-        ]
-        await store.aadd_documents(documents, ids=ids)
+            # Safely extract '_id' or generate fallback IDs
+            ids = [
+                doc.metadata["_id"] if "_id" in doc.metadata else str(uuid.uuid4())
+                for doc in documents
+            ]
+            
+            await store.aadd_documents(documents, ids=ids)
+        except Exception as e:
+            print(f"Error adding collection {collection_name}: {e}")
 
     @classmethod
     async def delete_collection(cls, api_key: str, collection_name: str):
