@@ -34,7 +34,7 @@ class ModelService:
     def get_gemini_model(
             cls,
             google_api_key: str,
-            model=os.getenv("GEMINI_MODEL", "gemini-1.5-pro"),
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite"),
             temperature=os.getenv("LLM_TEMPERATURE", 0.5)
     ):
         return ChatGoogleGenerativeAI(
