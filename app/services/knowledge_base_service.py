@@ -6,7 +6,7 @@ from app.utils.vector_store import VectorStore
 
 class KnowledgeBaseService:
     @classmethod
-    async def add_collection(cls, api_key: str, collection_name: str, documents: [Document]):
+    async def add_collection(cls, api_key: str, collection_name: str, documents: list[Document]):
         try:
             store = VectorStore.get_vector_store(
                 api_key=api_key,

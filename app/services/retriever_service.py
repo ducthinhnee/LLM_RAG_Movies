@@ -12,7 +12,7 @@ class RetrieverService:
             query: str,
             k: int = 5,
             score_threshold: float = 0.5
-    ) -> [Document]:
+    ) -> list[Document]:
         store = VectorStore.get_vector_store(
             api_key=api_key,
             collection_name=collection_name)

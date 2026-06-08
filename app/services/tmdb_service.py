@@ -6,6 +6,27 @@ from pymongo.errors import PyMongoError
 
 logger = structlog.get_logger(__name__)
 
+# Chỉ embed 2 collection này, mỗi collection chỉ lấy các field được chỉ định.
+# Thêm/bỏ field tại đây để điều chỉnh nội dung embedding.
+COLLECTION_CONFIG: dict[str, list[str]] = {
+    "movies": [
+        "tmdb_id",
+        "title",
+        "original_title",
+        "overview",
+        "genres",
+        "keywords",
+        "release_date"
+    ],
+    "people": [
+        "tmdb_id",
+        "name",
+        "known_for_department",
+        "biography",
+        "place_of_birth"
+    ],
+}
+
 class TMDBService:
     _instance = None
 
@@ -68,13 +89,19 @@ class TMDBService:
         result = collection.delete_many(query)
         return result.deleted_count
 
-    def fetch_collection_in_batches(self, collection_name: str, batch_size: int = 100):
+    def fetch_collection_in_batches(
+        self,
+        collection_name: str,
+        batch_size: int = 100,
+        fields: list[str] | None = None,
+    ):
         """
         Fetch documents from a collection in batches to handle large datasets without no_cursor_timeout.
 
         Args:
             collection_name (str): The name of the collection.
             batch_size (int): The number of documents to fetch in each batch.
+            fields (list[str] | None): Specific fields to project. If None, all fields are returned.
 
         Yields:
             list: A batch of documents from the collection.
@@ -83,6 +110,12 @@ class TMDBService:
             raise RuntimeError("Database connection is not initialized. Call 'connect()' first.")
 
         collection = self.get_collection(collection_name)
+
+        # Build MongoDB projection — always include _id for cursor pagination
+        projection = None
+        if fields:
+            projection = {field: 1 for field in fields}
+            projection["_id"] = 1  # always needed for pagination
 
         last_id = None  # Start with no last_id
         if self._error_sync:
@@ -95,8 +128,9 @@ class TMDBService:
                 if last_id:  # Fetch only documents greater than the last_id
                     query["_id"] = {"$gt": last_id}
 
-                # Fetch documents with a limit (pagination)
-                batch = list(collection.find(query).sort("_id").limit(batch_size))
+                # Fetch documents with a limit and optional projection
+                cursor = collection.find(query, projection).sort("_id").limit(batch_size)
+                batch = list(cursor)
 
                 if not batch:  # Stop when there are no more documents
                     break
@@ -112,7 +146,9 @@ class TMDBService:
 
     def stream_all_collections_data(self, batch_size: int = 100):
         """
-        Stream data from all collections in the database in batches.
+        Stream data from the configured collections (COLLECTION_CONFIG) in batches.
+        Only collections listed in COLLECTION_CONFIG are processed, and only their
+        specified fields are fetched from MongoDB.
 
         Args:
             batch_size (int): The number of documents to fetch per batch from each collection.
@@ -123,17 +159,31 @@ class TMDBService:
         if self.db is None:
             raise RuntimeError("Database connection is not initialized. Call 'connect()' first.")
 
-        collections = self.list_collections()
+        available_collections = self.list_collections()
 
-        if self._error_sync:
-            if self._current_collection in collections:
-                start_index = collections.index(self._current_collection)
-                collections = collections[start_index:]
+        # Only process collections defined in COLLECTION_CONFIG
+        target_collections = [
+            name for name in COLLECTION_CONFIG if name in available_collections
+        ]
 
-        for collection_name in collections:
-            print(f"Streaming data from collection: {collection_name}")
+        if not target_collections:
+            logger.warning(
+                "None of the target collections found in the database",
+                target=list(COLLECTION_CONFIG.keys()),
+                available=available_collections,
+            )
+
+        if self._error_sync and self._current_collection in target_collections:
+            start_index = target_collections.index(self._current_collection)
+            target_collections = target_collections[start_index:]
+
+        for collection_name in target_collections:
+            fields = COLLECTION_CONFIG[collection_name]
+            print(f"Streaming '{collection_name}' | fields: {fields}")
             self._current_collection = collection_name
-            for batch in self.fetch_collection_in_batches(collection_name, batch_size=batch_size):
+            for batch in self.fetch_collection_in_batches(
+                collection_name, batch_size=batch_size, fields=fields
+            ):
                 yield collection_name, batch
 
     def close(self):

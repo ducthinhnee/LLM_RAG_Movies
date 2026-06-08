@@ -1,3 +1,4 @@
+import asyncio
 import structlog
 from fastapi import APIRouter, Depends
 
@@ -16,17 +17,19 @@ async def logic_sync(tmdb_service: TMDBService, llm_api_key: str):
     tmdb_service.connect()
 
     # Stream data in batches from all collections
-    batch_size = 200
+    batch_size = 30
     for collection_name, batch in tmdb_service.stream_all_collections_data(batch_size=batch_size):
         print(f"\nCollection: {collection_name}")
         print(f"Batch size: {len(batch)}")
 
-        documents = [transform_document(doc) for doc in batch]
+        documents = [transform_document(doc, collection_name) for doc in batch]
         await KnowledgeBaseService.add_collection(
             api_key=llm_api_key,
             collection_name=collection_name,
             documents=documents
         )
+        # Sleep for 2 seconds to avoid rate limiting (TPM / RPM) on free tier
+        await asyncio.sleep(2.0)
 
     tmdb_service.close()
     print("Synced successfully")

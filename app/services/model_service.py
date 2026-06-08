@@ -4,6 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import JinaEmbeddings
 from pydantic import SecretStr
 
 
@@ -12,7 +13,7 @@ class ModelService:
     def get_gemini_embeddings(
             cls,
             google_api_key: str,
-            model=os.getenv("GEMINI_EMBEDDING", "models/text-embedding-004")
+            model=os.getenv("GEMINI_EMBEDDING", "models/gemini-embedding-001")
     ):
         return GoogleGenerativeAIEmbeddings(
             model=model,
@@ -27,7 +28,18 @@ class ModelService:
     ):
         return OpenAIEmbeddings(
             model=model,
-            openai_api_key=SecretStr(openai_api_key)
+            api_key=SecretStr(openai_api_key)
+        )
+
+    @classmethod
+    def get_jina_embeddings(
+            cls,
+            model=os.getenv("JINA_EMBEDDING", "jina-embeddings-v3")
+    ):
+        jina_api_key = os.getenv("JINA_API_KEY", "")
+        return JinaEmbeddings(
+            jina_auth_token=jina_api_key,
+            model_name=model
         )
 
     @classmethod
@@ -47,12 +59,12 @@ class ModelService:
     def get_openai_model(
             cls,
             openai_api_key: str,
-            model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             temperature=os.getenv("LLM_TEMPERATURE", 0.5)
     ):
         return ChatOpenAI(
             model_name=model,
-            openai_api_key=SecretStr(openai_api_key),
+            api_key=SecretStr(openai_api_key),
             temperature=temperature
         )
 
@@ -77,7 +89,12 @@ class ModelService:
 
     @classmethod
     def get_llm_embeddings(cls, llm_api_key: str, model: str = ""):
-        if os.getenv("USE_GEMINI", "True") == "True":
+        if os.getenv("USE_JINA", "False") == "True":
+            if model == "":
+                return cls.get_jina_embeddings()
+            else:
+                return cls.get_jina_embeddings(model=model)
+        elif os.getenv("USE_GEMINI", "True") == "True":
             if model == "":
                 return cls.get_gemini_embeddings(llm_api_key)
             else:
